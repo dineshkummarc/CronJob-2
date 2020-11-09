@@ -1,0 +1,407 @@
+<?php
+require_once __DIR__ . '/../../../libraries/Twilio/autoload.php';
+use Twilio\Rest\Client;
+header('Content-type: application/json');
+
+class Marketing_campaign extends MY_Controller
+{
+
+    function __construct()
+    {
+        parent::__construct();
+        $this->load->model("marketing_campaign_model");
+        $this->load->model("customer_model");
+    }
+
+    // function index(){
+    //     $token = $this->input->get_post("token");
+    //     $user_id = $this->get_user_id($token);
+    //     $arr = array('err_code' => "valid", "data" => $this->marketing_campaign_model->get_Pushphotos($user_id));
+    //     echo json_encode($arr);
+    // }
+
+    function GetPushPhoto(){
+        $token = $this->input->get_post("token");
+        $user_id = $this->get_user_id($token);
+        // $arr = array('err_code' => "valid", "data" => $this->marketing_campaign_model->get_Pushphotos($user_id));
+        $response = $this->marketing_campaign_model->get_Pushphotos($user_id);
+        echo json_encode($response);
+
+    }
+
+    function Add_pushnotification_data(){
+        
+        if (!empty($_FILES)) {
+            //update_profile_picture
+            $config['upload_path'] = FILE_UPLOAD_FOLDER;
+            $config['allowed_types'] = 'gif|jpg|png|jpeg';
+            $config['overwrite'] = FALSE;
+            $config['encrypt_name'] = TRUE;
+            $config['remove_spaces'] = TRUE;
+            $this->load->library('upload', $config);
+
+            if (!$this->upload->do_upload('image')) {
+                $this->data['error'] = array('error' => $this->upload->display_errors());
+                $arr = array('err_code' => "invalid", "message" => "Profile image not updated, please try again", "error" => $this->data['error']);
+                echo json_encode($arr);
+                die;
+            } else {
+                $data = array('upload_data' => $this->upload->data());
+
+                $file_name = $data["upload_data"]["file_name"];
+
+                $token = $this->input->get_post("token");
+                $user_id = $this->get_user_id($token);
+                //if(!isset($this->input->get_post("title"))) $title ="Image";
+                //else $title=$this->input->get_post("title");
+                $save_data = array(
+                    "imageURL" => $file_name,
+                    "title" => $this->input->get_post("title"),
+                    "user_id" => $user_id
+                );
+                $this->marketing_campaign_model->Add_Push_Notificatio_Data($save_data);
+                $arr = array('err_code' => "valid", "message" => "Photo Added!.","data"=>$save_data,'userdata'=>$user_id);
+                echo json_encode($arr);
+            }
+        }
+
+    }
+
+    function add_marketing_template()
+    {
+        $token = $this->input->get_post("token");
+        $user_id = $this->get_user_id($token);
+
+        extract($_POST);
+
+        if($type == "Email Template"){
+            $title = $email_title;
+            $message = $email_message;
+            $template_type = $type;
+        }else if($type == "Message Template"){
+            $title = $message_title;
+            $message = $message_message;
+            $template_type = $type;
+        }
+        $data = array(
+            "title" => $title,
+            "message" => $message,
+            "created_at" => time(),
+            "updated_at" => time(),
+            "status" => 1,
+            "user_id" => $user_id,
+            "template_type" => $template_type
+        );
+
+        if($mode == "add"){
+            $response = $this->marketing_campaign_model->add_campaign_template($data);
+        }else{
+            $response = $this->marketing_campaign_model->update_campaign_templates($data,$template_id);
+        }
+         
+        echo json_encode($response);
+    }
+
+    function get_marketing_templates()
+    {
+        $token = $this->input->get_post("token");
+        $user_id = $this->get_user_id($token);
+        $template_type = $this->input->get_post("template_type");
+        $response = $this->marketing_campaign_model->get_campaign_templates($user_id, $template_type);
+        echo json_encode($response);
+    }
+
+    function get_campaign_result_list()
+    {
+        // print_r($_POST);
+        $token = $this->input->get_post("token");
+        $user_id = $this->get_user_id($token);
+        $filter_range = $this->input->get_post("filter");
+        // print_r('2');
+        $response = $this->marketing_campaign_model->get_campaign_result_list($user_id, $filter_range);
+        echo json_encode($response);
+
+    }
+
+    function update_marketing_template()
+    {
+        $token = $this->input->get_post("token");
+        $user_id = $this->get_user_id($token);
+        $title = $this->input->get_post("title");
+        $message = $this->input->get_post("message");
+        $template_id = $this->input->get_post("template_id");
+        $data = array(
+            // "template_type"=>$template_type,
+            "title" => $title,
+            "message" => $message,
+            "user_id" => $user_id,
+
+        );
+        $response = $this->marketing_campaign_model->update_campaign_templates($template_id, $data);
+        echo json_encode($response);
+    }
+
+    function sms_campaign()
+    {
+
+        $token = $this->input->get_post("token");
+        $user_id = $this->get_user_id($token);
+        $data = $this->input->get_post("customerData");
+        $template_subject = $this->input->get_post("template_subject");
+        $template_body = $this->input->get_post("template_body");
+        if ($this->input->get_post("template_type") == EMAIL_TEMPLATE_TYPE) {
+            
+            $emails = array();
+            
+            foreach ($data as $key => $customer) {
+                try {
+                    
+                    $email = str_replace(["(", ")", "-", " "], ["", "", "", ""], $customer["Customer_email"]);
+                    if ($email != "" && $email != null) {
+                        array_push($emails, $email);
+                    }
+                } catch (Exception $ex) {
+                    
+                }
+            }
+           
+            // array_push($emails, "divyesh.cognisun@gmail.com");
+            if(!$this->customer_model->send_campaign_templates($emails, $template_body, $template_subject)){
+                
+                return false;
+            }
+                return true;
+
+
+
+            // foreach ($data as $key => $customer) {
+            //     try {
+            //         $email = str_replace(["(", ")", "-", " "], ["", "", "", ""], $customer["Customer_email"]);
+            //         if ($email != "" && $email != null && $email !="" && $email != "undefined" && $email != "Walk-in" && $email != "Walkin") {
+            //             //echo $email;
+            //             $this->customer_model->send_campaign_templates($email, $template_body, $template_subject);
+            //         }
+            //     } catch (Exception $ex) {
+            //          //echo $email;
+            //         // break;   
+            //     }
+            // }
+           // return true;
+
+        } else if ($this->input->get_post("template_type") == MESSAGE_TEMPLATE_TYPE) {
+            //  print_r($_POST);
+            // exit;
+            $phoneNumbers = array();
+            foreach ($data as $key => $customer) {
+                try {
+                    $phone = str_replace(["(", ")", "-", " "], ["", "", "", ""], $customer["customer_mobile"]);
+                    if ($phone != "" && $phone != null && $phone != "+1") {
+                        $string = base_url();
+                        if (strpos($string, 'dev.shearcircle') !== false || strpos($string, 'localhost') !== false || strpos($string, 'qa.shearcircle') !== false) 
+                        {
+                            $account_sid = TEST_ACCOUNT_SID; 
+                            $auth_token = TEST_AUTH_TOKEN;
+                            $twilio_number = TEST_TwilioNumber;
+                        // ASSIGN ALL TEST DETAILS VALUES
+                        }
+                        else 
+                        {
+                            $account_sid = LIVE_ACCOUNT_SID; 
+                            $auth_token = LIVE_AUTH_TOKEN;
+                            $twilio_number = LIVE_TwilioNumber;
+                        // ASSIGN ALL LIVE DETAILS VALUES
+                        }
+                        // $twilio_number = TwilioNumber;
+                        // $account_sid = ACCOUNT_SID;
+                        // $auth_token = AUTH_TOKEN;
+                       // $message="Marketing Campaign (Text SMS)";
+                        $message = $template_body;
+                        $this->log_sms($twilio_number, $phone, $message);
+                        $client = new Client($account_sid, $auth_token);
+                        $client->messages->create(
+                            $phone,
+                            array(
+                                // 'to'=>   $phone,
+                                'from' => $twilio_number,
+                                'body' => substr($message, 0, 155)
+                            )
+                        );
+                    }
+                } catch (Exception $ex) {
+
+                }
+            }
+            return true;
+        } else if ($this->input->get_post("template_type") == PUSH_NOTY_TYPE) {
+            $this->sendPushNotification("ShearCircle", $template_subject, $user_id);
+            return true;
+        }
+
+        
+
+    }
+
+    function sendPushNotification($title,$text,$user_id){
+
+        // user_device_details -> device_token
+       $tokens = $this->db->get_where("user_device_details",["user_id"=>$user_id])->result();
+       
+
+        foreach($tokens as $token){
+            
+            if(empty($token)) continue;
+
+            $server_key = 'AAAAoV4vfAk:APA91bHXuaesH9RIOR5oZq_SvnB89zZ8ToVAtLyhFecTkDmvDgA_LzDMKI7kPi2aDdG3YopXY0vYtc78Jo243xnQ2Pau1PFyYBGvcCWUUaMERLQBtmKcLwSNALrj-OEpQj3SSwJFeDysTmhqoa8Aesq9ULX0zP2ZNw';
+        
+            $ch = curl_init("https://fcm.googleapis.com/fcm/send");
+        
+            //working token
+            $token= $token->device_token;
+            
+            //Creating the notification array. -> Original
+            $notification = array(
+                'title' =>$title, 
+                'text' => $text,
+                'sound' => "default"
+                
+
+            );
+        
+            // Original
+            $data = array(
+                'title' =>$title , 
+                'text' => $text,
+                "action"=> "url",
+                "action_destination"=>"https://shearcirlce.com",
+                "image"=>"http://www.androiddeft.com/wp-content/uploads/2017/11/Shared-Preferences-in-Android.png"
+            );
+
+            // $data = array(
+            //     "forceShow" => true,
+            //     "icon" => "default",
+            //     "title" => "Big Picture",
+            //     "message" => "This is my big picture message",
+            //     "style" => "picture",
+            //     "priority" => 1,
+            //     "badge" => 1,
+            //     "action"=> "url",
+            //     "action_destination"=>"https://shearcirlce.com",
+            //     "image" => "https://raw.githubusercontent.com/Ashwinvalento/cartoon-avatar/master/lib/images/female/68.png",
+            
+            // );
+            // $data = array(
+            //     "title": "all member hello",
+            //     "body": "how are you",
+            //     "sound": "default",
+            //     "image": "www/assets/img/icon.png",
+            //     "image-type": "circle",
+            //     "force-start": 1
+            // );
+
+            //This array contains, the token and the notification. The 'to' attribute stores the token.
+            $arrayToSend = array('to' => $token, 'notification' => $notification ,'data'=>$data,'priority'=>'high');
+            //$arrayToSend = array('to' => $token,'data'=>$data,'priority'=>'high', 'badge'=>'1');
+        
+            //Generating JSON encoded string form the above array.
+            $json = json_encode($arrayToSend);
+
+            //Setup headers:
+            $headers = array();
+            $headers[] = 'Content-Type: application/json';
+            $headers[] = 'Authorization: key= '.$server_key; // key here
+        
+            //Setup curl, add headers and post parameters.
+            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "POST");                                                                     
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $json);
+            curl_setopt($ch, CURLOPT_HTTPHEADER,$headers);       
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
+            
+            //Send the request
+            $response = curl_exec($ch);
+        
+            //Close request
+            curl_close($ch);
+        }
+    }
+
+    function log_sms($twilio_number, $phone, $message)
+    {
+        $data = array(
+            "sms_type" => "Campaign_sms",
+            "sender" => $twilio_number,
+            "reciever" => $phone,
+            "message" => $message,
+            "created_at" => time(),
+            "updated_at" => time(),
+            "status" => 1
+        );
+        //print_r($this->customer_model);
+        $this->customer_model->add_log($data);
+    }
+
+    function send_templates()
+    {
+        $token = $this->input->get_post("token");
+        $user_id = $this->get_user_id($token);
+        $data = $this->input->get_post("data");
+
+
+    }
+
+    function get_repetition_factors()
+    {
+        $response = $this->customer_model->get_repetition_factors();
+        echo json_encode($response);
+    }
+
+    function save_campaigns_to_send()
+    {
+        $token = $this->input->get_post("token");
+        $user_id = $this->get_user_id($token);
+        // print_r($_POST);
+        $is_task_scheduled = $this->input->get_post("is_task_scheduled");
+        if ($is_task_scheduled == 'Yes') 
+        {
+            
+            $start_date = $this->input->get_post("start_date");
+            $end_date = $this->input->get_post("end_date");
+            $template_type = $this->input->get_post("template_type");
+            $template_id = $this->input->get_post("template_id");
+            $customer_type = $this->input->get_post("customer_type");
+            $is_repeat = $this->input->get_post("is_repeat");
+            $template_title = $this->input->get_post("template_subject");
+            $repeation_type = $this->input->get_post("repeation_type");
+            $is_active = 1;
+            $times=$this->input->get_post("times");
+            
+            $response = $this->customer_model->save_campaigns_to_send($user_id, $start_date, $end_date, $template_type, $template_id, $customer_type, $is_repeat, $repeation_type, $is_active,$times);
+            $message = "Tasks Scheduled Successfully!";
+            $arr = array('err_code' => "valid", "response" => $response, "message" => $message);
+            echo json_encode($arr);
+        }
+        else 
+        {
+                // print_r($_POST);
+                // exit;
+            if(!$this->sms_campaign())
+            {
+                $arr = array('err_code' => "invalid", "response" => "Error", "message" => "Some error occured");
+                echo json_encode($arr);
+            } else 
+            {
+                if ($this->input->get_post("template_type") == EMAIL_TEMPLATE_TYPE) 
+                {
+                    $message = "Email Template Sent Successfully!";
+                }
+                 else if($this->input->get_post("template_type") == MESSAGE_TEMPLATE_TYPE)
+                {
+                    $message = "Message Template Sent Successfully!";
+                } 
+                $arr = array('err_code' => "valid", "response" => $response, "message" => $message);
+                echo json_encode($arr);
+            }
+            
+        }
+    }
+
+}
